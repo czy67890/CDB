@@ -10,9 +10,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <string>
-
+#include "CDataBase/Slice.h"
 namespace CDB{
-	class Slice;
 	
 	class WritableFile;
 

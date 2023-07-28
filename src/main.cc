@@ -2,59 +2,32 @@
 #include <atomic>
 #include <cassert>
 #include <thread>
-class Base{
+#include "Util/NoDestructor.h"
+using namespace std;
+class A{
 public:
-	Base();
-	virtual void someVirtualFunc() = 0;
-};
+	A(const int a,const int b){
 
-
-
-class Dirved
-	:public Base
-{
-public:
-	void someVirtualFunc() override {
-		std::cout<< "Dirved be called"<<std::endl;
 	}
-
-
-};
-
-class BaseWrapper
-	:public Base
-{
-public:
-	BaseWrapper(Base * ptr)
-		:ptr_(ptr)
-	{
-
-	}	
-
-	void someVirtualFunc() override{
-		ptr_->someVirtualFunc();
+	void func(){
+		std::cout << "i be created " << std::endl;
 	}
-private:
-	Base* ptr_;
-};
-class String{
-public:
-	String() = default;
-	String(String && t){
-		a = t.a;
-		t.a = nullptr;
-		std::cout << "move be called " << std::endl;
-	}
-
-	char* a;
 };
 
-constexpr int index = 0;
+void testForward(int& a){
+	cout << "no const version" << endl;
+}
+
+void testForward(const int& a){
+	cout << "const version" << endl;
+}
 
 
 
 int main(){
-	String a;
-	String b(String());
+	CDB::NoDestructor<A> s(3,6);
+	int a = 30;
+	testForward(a);
+	testForward(std::forward<int&> (a));
 	return 0;
 }

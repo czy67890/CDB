@@ -8,10 +8,11 @@
 
 using namespace CDB;
 
-void appendNumberTo(std::string* str, uint64_t num)
+
+void CDB::appendNumberTo(std::string* str, uint64_t num)
 {
 	char buf[30];
-	std::snprintf(buf,sizeof(buf),"%llu",static_cast<unsigned long long >(num));
+	std::snprintf(buf, sizeof(buf), "%llu", static_cast<unsigned long long>(num));
 	str->append(buf);
 }
 
@@ -33,7 +34,7 @@ void CDB::appendEscapedStringTo(std::string* str, const Slice& value)
 std::string CDB::numberToString(uint64_t num)
 {	
 	std::string r;
-	appendNumberTo((&r, num));
+	appendNumberTo(&r, num);
 	return r;
 }
 
@@ -51,6 +52,7 @@ bool CDB::consumeDecimalNumber(Slice* in, uint64_t* val)
 	uint64_t value = 0;
 	const uint8_t* start = reinterpret_cast<const uint8_t*>(in->data());
 	const uint8_t* end = start + in->size();
+	const uint8_t* current = start;
 	for(;current != end;++current){
 		const uint8_t ch = *current;
 		if( ch < '0' || ch > '9'){

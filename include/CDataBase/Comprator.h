@@ -8,10 +8,9 @@
  */
 #pragma once
 #include <string>
-
+#include "CDataBase/Slice.h"
 
 namespace CDB{
-	class Slice;
 
 
 class Comparator{
@@ -22,9 +21,9 @@ public:
 
 	virtual const char* name() const = 0;
 
-	virtual void findShortestSeparator(const std::string* start, const Slice& limit) const = 0;
+	virtual void findShortestSeparator(std::string* start, const Slice& limit) const = 0;
 	
-	virtual void findShortSuccessor(const std::string* key) const = 0;
+	virtual void findShortSuccessor(std::string* key) const = 0;
 
 };
 
