@@ -21,7 +21,7 @@ namespace CDB{
 		Status(const Status& rhs);
 		Status& operator=(const Status& rhs);
 
-		Status(Status&& rhs) noexcept : state_(rhs.state_) { rhs.state_ = nullptr; }
+		Status(Status&& rhs) noexcept :  Status(){  swap(*this,rhs); }
 		Status& operator=(Status&& rhs) noexcept;
 
 		// Return a success status.
@@ -66,6 +66,8 @@ namespace CDB{
 		// Returns the string "OK" for success.
 		std::string ToString() const;
 
+		friend void swap(Status& a,Status& b) noexcept;
+
 	private:
 		enum Code {
 			kOk = 0,
@@ -91,20 +93,23 @@ namespace CDB{
 		const char* state_;
 	};
 
-	inline Status::Status(const Status& rhs) {
+	inline Status::Status(const Status& rhs) 
+	{
 		state_ = (rhs.state_ == nullptr) ? nullptr : CopyState(rhs.state_);
 	}
 	inline Status& Status::operator=(const Status& rhs) {
 		// The following condition catches both aliasing (when this == &rhs),
 		// and the common case where both rhs and *this are ok.
-		if (state_ != rhs.state_) {
-			delete[] state_;
-			state_ = (rhs.state_ == nullptr) ? nullptr : CopyState(rhs.state_);
+		
+		if(&rhs != this){
+			Status tmp(rhs);
+			swap(*this, tmp);
 		}
 		return *this;
 	}
 	inline Status& Status::operator=(Status&& rhs) noexcept {
-		std::swap(state_, rhs.state_);
+		Status tmp(std::move(rhs));
+		swap(tmp, *this);
 		return *this;
 	}
 }

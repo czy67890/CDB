@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 #include "CDataBase/Status.h"
-
+#include "CDataBase/Slice.h"
 
 namespace CDB {
 
@@ -20,7 +20,6 @@ namespace CDB {
 	class Logger;
 	class RandomAccessFile;
 	class SequentialFile;
-	class Slice;
 	class WritableFile;
 
 	class Env {
@@ -32,7 +31,7 @@ namespace CDB {
 
 		virtual ~Env();
 
-		static Env* default();
+		static Env* Default();
 
 		virtual Status newSequentialFile(const std::string& name, SequentialFile** result) = 0;
 
@@ -59,16 +58,16 @@ namespace CDB {
 
 		virtual Status getFileSize(const std::string& fname, uint64_t* fileSize) = 0;
 
-		virtual renameFile(const std::string& src, const std::string& target) = 0;
+		virtual Status renameFile(const std::string& src, const std::string& target) = 0;
 
 		virtual Status lockFile(const std::string& fname, FileLock** lock) = 0;
 
 		virtual Status unlockFile(FileLock* lock) = 0;
 
-		virtual schedule(ArrageFunc func, void* arg) = 0;
+		virtual void schedule(ArrageFunc func, void* arg) = 0;
 
 
-		virtual startThread(ArrageFunc func, void* arg) = 0;
+		virtual void startThread(ArrageFunc func, void* arg) = 0;
 
 		virtual Status getTestDir(std::string* path) = 0;
 
@@ -113,7 +112,7 @@ namespace CDB {
 
 		WritableFile() = default;
 
-		WritableFile(const Writable&) = delete;
+		WritableFile(const WritableFile&) = delete;
 
 		WritableFile& operator=(const WritableFile&) = delete;
 
@@ -156,7 +155,7 @@ namespace CDB {
 		virtual ~FileLock();
 	};
 
-	void Log(Logger* infoLog, const char* format, ...)
+	void Log(Logger* infoLog, const char* format, ...);
 
 	Status WriteStringToFile(Env* env, const Slice& data, const std::string& fname);
 
@@ -180,9 +179,11 @@ namespace CDB {
 			RandomAccessFile** r) override {
 			return target_->newRandomAccessFile(f, r);
 		}
-		Status newWritableFile(const std::string& f, WritableFile** r) override {
-			return target_->newWritableFile(f, r);
+
+		Status newWriteableFile(const std::string& name, WritableFile** result) override{
+			return target_->newWriteableFile(name,result);
 		}
+
 		Status newAppendableFile(const std::string& f, WritableFile** r) override {
 			return target_->newAppendableFile(f, r);
 		}
@@ -211,22 +212,22 @@ namespace CDB {
 		Status lockFile(const std::string& f, FileLock** l) override {
 			return target_->lockFile(f, l);
 		}
-		Status unlockFile(FileLock* l) override { return target_->UnlockFile(l); }
+		Status unlockFile(FileLock* l) override { return target_->unlockFile(l); }
 		void schedule(void (*f)(void*), void* a) override {
 			return target_->schedule(f, a);
 		}
 		void startThread(void (*f)(void*), void* a) override {
 			return target_->startThread(f, a);
 		}
-		Status getTestDirectory(std::string* path) override {
-			return target_->getTestDirectory(path);
+		Status getTestDir(std::string* path) override {
+			return target_->getTestDir(path);
 		}
 		Status newLogger(const std::string& fname, Logger** result) override {
 			return target_->newLogger(fname, result);
 		}
 		uint64_t nowMicros() override { return target_->nowMicros(); }
-		void sleepForMicroseconds(int micros) override {
-			target_->sleepForMicroseconds(micros);
+		void sleepMicroSeconds(int micros) override {
+			target_->sleepMicroSeconds(micros);
 		}
 
 	private:
