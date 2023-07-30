@@ -5,7 +5,13 @@
 #include <vector>
 #include "Util/NoDestructor.h"
 #include <limits>
+#include <unistd.h>
 #include <algorithm>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <cstring>
 using namespace std;
 class Solution {
 public:
@@ -60,9 +66,31 @@ public:
 
 };
 int main(){
-	Solution s;
-	cout << s.minimumString("a",
-		"b"
-		,"ba");
+	int fd{ -1 };
+	char buf[6]{ 0 };
+
+	fd = open("/mnt/d/Code/CDB/filenew.txt", O_RDONLY);
+	int readed = 0;
+	while (true) {
+		int count = ::pread(fd, buf, sizeof(buf),readed);
+		readed += count;
+		std::cout << buf << endl;
+		if (count <= 0) {
+			break;
+		}
+		
+	}
+
+	/*int fd = open("/mnt/d/Code/CDB/filenew.txt", O_RDONLY);
+	printf("%d \n", fd);
+	char buf[8] = { 0 };
+	int num = 0;
+	while ((num = read(fd, buf, sizeof(buf))) > 0)
+	{
+		printf("读到的字符数为:%d \n", num);
+		printf("%s \n", buf);
+		memset(buf, 0, sizeof(buf));
+	}
+	printf("文件读取结束了 \n");*/
 	return 0;
 }
