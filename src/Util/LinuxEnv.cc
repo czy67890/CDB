@@ -208,5 +208,252 @@ namespace CDB{
 			const std::string fileName_;
 		};
 
+		class LinuxMmapReadableFile final: public RandomAccessFile{
+		public:
+			LinuxMmapReadableFile(std::string fileName,char *mmapBase,size_t len,Limiter *mmapLimiter)
+				:mmapBase_(mmapBase),len_(len),mmapLimiter_(mmapLimiter),fileName_(std::move(fileName))
+				
+			{}
+		
+			~LinuxMmapReadableFile() override{
+				::munmap(static_cast<void*>(mmapBase_,len_));
+				mmapLimiter_->release();
+			}
+
+			Status read(uint64_t offset,size_t n,Slice *result,char *scratch) const override{
+				if(offset + n > len_){
+					*result = Status();
+					///EINVAL 无效的参数
+					return LinuxError(fileName_, EINVAL);
+				}
+				*result = Slice(mmapBase_ + offset,n);
+				return Status::OK();
+			}
+
+
+		private:
+			char* const mmapBase_;
+			const size_t len_;
+			Limiter* const mmapLimiter_;
+			const std::string fileName_;
+		};
+
+
+		class LinuxWritableFile final :public WritableFile{
+		public:
+			LinuxWritableFile(std::string fileName,int fd)
+				:pos_(0),fd_(fd),isManifest_(isManifest(fileName)),
+				fileName_(std::move(fileName)),dirName_(dirname(fileName_))
+			{
+
+			}
+
+			~LinuxWritableFile() override{
+				if(fd_ >= 0){
+					close();
+				}
+			}
+
+			Status append(const Slice &data) override{
+				size_t writeSize = data.size();
+				const char* writeData = data.data();
+
+				size_t copySize = std::min(writeSize, KWriteableFileBufferSize - pos_);
+				std::memcpy(buf_ + pos_ ,writeData,copySize);
+				writeData += copySize;
+				writeSize -= copySize;
+				pos_ += copySize;
+				
+				if(writeSize == 0){
+					return Status::OK();
+				}
+
+				Status status = flushBuffer();
+				if(!status.ok()){
+					return status;
+				}
+				///if we can put the data to the buffer once,we put
+				/// otherwise w directly write to disk with no buffer
+				if(writeSize < KWriteableFileBufferSize){
+					std::memcpy(buf_,writeData,writeSize);
+					pos_ = writeSize;
+					return Status::OK();
+				}
+				return writeUnBuffered(writeData, writeSize);
+			}
+
+
+
+			static Slice basename(const std::string& filename) {
+				std::string::size_type separator_pos = filename.rfind('/');
+				if (separator_pos == std::string::npos) {
+					return Slice(filename);
+				}
+				// The filename component should not contain a path separator. If it does,
+				// the splitting was done incorrectly.
+				assert(filename.find('/', separator_pos + 1) == std::string::npos);
+
+				return Slice(filename.data() + separator_pos + 1,
+					filename.length() - separator_pos - 1);
+			}
+
+
+			Status close(){
+				Status status = flushBuffer();
+				const int closeResult = ::close(fd_);
+				if(closeResult < 0 && status.ok()){
+					status = LinuxError(fileName_, errno);
+				}
+				fd_ = -1;
+				return status;
+			}
+
+
+			static bool isManifest(const std::string& filename) {
+				return basename(filename).starts_with("MANIFEST");
+			}
+
+			static std::string dirname(const std::string& filename) {
+				std::string::size_type separator_pos = filename.rfind('/');
+				if (separator_pos == std::string::npos) {
+					return std::string(".");
+				}
+				// The filename component should not contain a path separator. If it does,
+				// the splitting was done incorrectly.
+				assert(filename.find('/', separator_pos + 1) == std::string::npos);
+
+				return filename.substr(0, separator_pos);
+			}
+		
+
+
+			Status flush() override{
+				return flushBuffer();
+			}
+
+			Status sync() override{
+				Status status = syncDirIfManifest();
+				if(!status.ok()){
+					return status;
+				}
+				status = flushBuffer();
+				if (!status.ok()) {
+					return status;
+				}
+				return syncFd(fd_,fileName_);
+			}
+
+		private:
+
+			Status writeUnBuffered(const char* data, size_t size) {
+				while(size > 0){
+					ssize_t writeResult = ::write(fd_,data,size);
+					if(writeResult < 0){
+						///慢调用时被中断触发EINTR
+						if(errno == EINTR){
+							continue;
+						}
+						return LinuxError(fileName_,errno);
+					}
+					data += writeResult;
+					size -= writeResult;
+				}
+				return Status::OK();
+			}
+
+			Status syncDirIfManifest(){
+				Status status;
+				if(!isManifest_){
+					return status;
+				}
+				int fd = ::open(dirName_.c_str(),O_RDONLY | kOpenBaseFlags);
+				if(fd < 0){
+					status = LinuxError(dirName_, errno);
+				}	
+				else{
+					status = syncFd(fd,dirName_);
+					::close(fd);
+				}
+				return status;
+			}
+
+			static Status syncFd(int fd,const std::string &fdPath){
+#if HAVE_FULLFSYNC
+				if(::fcntl(fd, F_FULLFSYNC) == 0){
+					return Status::OK();
+				}
+#endif
+				///what is the diff between fsync and fdatasync
+				///fdatasync only sync the data to disk not the FILE information
+				///but fsync will do ,so fsync need at least twice IO while fdatasync once
+
+#if HAVE_FDATASYNC
+				bool syncSuc = ::fdatasync(fd) == 0;
+#else
+				bool syncSuc = ::fsync(fd) == 0;
+#endif
+				if(syncSuc){
+					return Status::OK();
+				}
+				return LinuxError(fdPath, errno);
+
+			}
+
+
+			Status flushBuffer() {
+				Status status = writeUnBuffered(buf_, pos_);
+				pos_ = 0;
+				return status;
+			}
+
+
+
+		private:
+			char buf_[KWriteableFileBufferSize];
+			const bool isManifest_;
+			size_t pos_;
+			int fd_;
+			const std::string fileName_;
+			const std::string dirName_;
+		};
+
+
+		int lockOrUnLock(int fd,bool lock){
+			errno = 0;
+			/// file lock enable us to lock file in the case we concuracy read file
+			struct ::flock fileLockInfo;
+			std::memset(&fileLockInfo,0,sizeof(fileLockInfo));
+			fileLockInfo.l_type = (lock ? F_WRLCK : F_UNLCK);
+			fileLockInfo.l_whence = SEEK_SET;
+			fileLockInfo.l_start = 0;
+			fileLockInfo.l_len = 0;
+			return ::fcntl(fd,F_SETLK,&fileLockInfo);
+		}
+
+		class LinuxFileLock :public FileLock {
+		public:
+			LinuxFileLock(int fd,std::string filename)
+				:fd_(fd),filename_(std::move(filename))
+			{
+
+			}
+
+			int fd() const { return fd_; }
+
+			const std::string &filename() const{
+				return filename_;
+			}
+
+
+		private:
+			const int fd_;
+			const std::string filename_;
+		};
+
+
+
+
+
+
 	}
 }
