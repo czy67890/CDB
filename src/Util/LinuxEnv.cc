@@ -17,7 +17,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
-
+#include <functional>
 #include <atomic>
 #include <cerrno>
 #include <cstddef>
@@ -450,8 +450,111 @@ namespace CDB{
 			const std::string filename_;
 		};
 
+		/*!
+		 * \class LinuxLockTable
+		 *
+		 * \brief actually a protected set
+		 *
+		 * \author czy
+		 * \date 2023.07.31
+		 */
+		class LinuxLockTable{
+		public:
+
+			bool insert(const std::string &fname) LOCKS_EXCLUDED (mu_){
+				mu_.lock();
+				bool suc = lockedFiles_.insert(fname).second;
+				mu_.unlock();
+				return suc;
+			}
+
+			void remove(const std::string& fname ) LOCKS_EXCLUDED(mu_){
+				mu_.lock();
+				lockedFiles_.erase(fname);
+				mu_.lock();
+			}
+
+		private:
+			Mutex mu_;
+			std::set <std::string> lockedFiles_ GUARDED_BY(mu_);
+		}; 
+
+		using BackWorkGroundFunc = std::function<void(void*)>;
+		class LinuxEnv :public Env {
+		public:
+			LinuxEnv();
+
+			~LinuxEnv() override {
+				static const char msg[] = "LinuxEnv singleton destroyed. Unsupported behavior!\n";
+				std::fwrite(msg, 1, sizeof(msg), stderr);
+				std::abort();
+			}
+
+			Status newSequentialFile(const std::string &filename,SequentialFile **result) override{
+				int fd = ::open(filename.c_str(),O_RDONLY | kOpenBaseFlags);
+				if(fd < 0){
+					*result = nullptr;
+					return LinuxError(filename, errno);
+				}
+				*result = new LinuxSequentialFile(filename, fd);
+				return Status::OK();
+			}
+
+			Status newRandomAccessFile(const std::string& filename, RandomAccessFile** result) override{
+				*result = nullptr;
+				int fd = ::open(filename.c_str(),O_RDONLY | kOpenBaseFlags);
+				if(fd < 0){
+					return LinuxError(filename, errno);
+				}
+				
+				if(!mmapLimiter_.acquire()){
+					*result = new LinuxRandomAccessFile(filename,fd,&fdLimiter_);
+					return Status::OK();
+				}
+
+				uint64_t fileSize;
+
+				Status status = getFileSize(filename, &fileSize);
+
+				if(status.ok()){
+					void* mmapBase = ::mmap(nullptr,fileSize,PROT_READ,MAP_SHARED,fd,0);
+					if(mmapBase != MAP_FAILED){
+						*result = new LinuxMmapReadableFile(filename,static_cast<char*>(mmapBase),fileSize,&mmapLimiter_);
+					}
+					else{
+						status = LinuxError(filename, errno);
+					}
+				}
+				::close(fd);
+				if(!status.ok()){
+					mmapLimiter_.release();
+				}
+				return status;
+			}
 
 
+
+		private:
+
+			struct BackGroundWorkItem {
+				explicit BackGroundWorkItem(BackWorkGroundFunc func, void* arg)
+					:this->func(std::move(func)), this->arg(arg)
+				{
+				}
+				const BackWorkGroundFunc func;
+				void* const arg;
+			};
+
+			Mutex backgroundWorkMutex_;
+			CondVar backGroundWorkCV_ GUARDED_BY(backgroundWorkMutex_);
+			bool startedBackGroundThread_ GUARDED_BY(backgroundWorkMutex_);
+
+			std::queue<BackGroundWorkItem> backGroundWorkQueue_ GUARDED_BY(backgroundWorkMutex_);
+
+			LinuxLockTable locks_;
+			Limiter mmapLimiter_;
+			Limiter fdLimiter_;
+		};
 
 
 
