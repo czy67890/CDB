@@ -13,7 +13,7 @@
 #include <vector>
 #include "CDataBase/Status.h"
 #include "CDataBase/Slice.h"
-
+#include <functional>
 namespace CDB {
 
 	class FileLock;
@@ -23,7 +23,7 @@ namespace CDB {
 	class WritableFile;
 
 	class Env {
-		using ArrageFunc = void (*)(void* arg);
+		using ArrageFunc = std::function<void(void* arg)>;
 	public:
 		Env();
 
@@ -213,10 +213,10 @@ namespace CDB {
 			return target_->lockFile(f, l);
 		}
 		Status unlockFile(FileLock* l) override { return target_->unlockFile(l); }
-		void schedule(void (*f)(void*), void* a) override {
+		void schedule(ArrageFunc f, void* a) override {
 			return target_->schedule(f, a);
 		}
-		void startThread(void (*f)(void*), void* a) override {
+		void startThread(ArrageFunc f, void* a) override {
 			return target_->startThread(f, a);
 		}
 		Status getTestDir(std::string* path) override {

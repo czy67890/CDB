@@ -499,7 +499,13 @@ namespace CDB{
 				*result = new LinuxSequentialFile(filename, fd);
 				return Status::OK();
 			}
-
+			/*!
+			 *  @brief  newRandomAccessFile
+			 *	create a random accessFile and try to mmap it (in ordered to prove io perfermance)
+			 *  @param filename,  result
+			 *  @return 
+			 *
+			 */
 			Status newRandomAccessFile(const std::string& filename, RandomAccessFile** result) override{
 				*result = nullptr;
 				int fd = ::open(filename.c_str(),O_RDONLY | kOpenBaseFlags);
@@ -532,7 +538,179 @@ namespace CDB{
 				return status;
 			}
 
+			Status newWritableFile(const std::string& filename,
+				WritableFile** result) override
+			{
+				int fd = ::open(filename.c_str(),O_TRUNC | O_WRONLY | O_CREAT | kOpenBaseFlags,0644);
+				if(fd < 0){
+					*result = nullptr;
+					return LinuxError(filename, errno);
+				}
+				*result = new LinuxWritableFile(filename, fd);
+				return Status::OK();
+			}
 
+			Status newAppendableFile(const std::string &fname ,WritableFile** result) override{
+				int fd = ::open(filename.c_str(),O_APPEND|O_WRONLY|O_CREAT|kOpenBaseFlags , 0644);
+				if(fd < 0){
+					*result = nullptr;
+					return LinuxError(fname, errno);
+				}
+				*result = new LinuxWritableFile(filename,fd);
+				return Status::OK();
+			}
+
+			bool fileExists(const std::string &filename) override{
+				return ::access(filename.c_str(),F_OK) == 0;
+			}
+
+			Status getChildren(const std::string& dirStr, std::vector<std::string>* result) override
+			{
+				result->clear();
+				::DIR* dir = ::opendir(dirStr.c_str());
+				if(dir == nullptr){
+					return LinuxError(dirStr, errno);
+				}
+				struct ::dirent* entry;
+				// get all subdir name
+				while((entry = ::readdir(dir)) != nullptr){
+					result->emplace_back(entry->d_name);
+				}
+				::closedir(dir);
+				return Status::OK();
+			}
+
+			Status removeFile(const std::string& fname) override{
+				if(::unlink(fname.c_str()) != 0){
+					return LinuxError(fname, errno);
+				}
+				return Status::OK();
+			}
+
+			Status createDir(const std::string& dirname) override{
+				if(::mkdir(dirname.c_str() ,0755 ) != 0 ){
+					return LinuxError(dirname, errno);
+				}
+				return  Status::OK();
+			}
+
+			Status removeDir(const std::string& dirname) override{
+				if(::rmdir(dirname.c_str()) != 0 ){
+					return LinuxError(dirname, errno);
+				}
+				return Status::OK();
+			}
+
+			Status getFileSize(const std::string& fname, uint64_t* fileSize) override{
+				struct ::stat fileStat;
+				if(::stat(fname.c_str() , &fileStat) != 0){
+					*size = 0;
+					return LinuxError(fname, errno);
+				}
+				*size = fileStat.st_size;
+				return Status::OK();
+			}
+
+			Status renameFile(const std::string& src, const std::string& target) override{
+				if(std::rename(src.c_str(),target.c_str()) != 0){
+					return LinuxError(src, errno);
+				}
+				return Status::OK();
+			}
+
+			Status lockFile(const std::string& fname, FileLock** lock) override{
+				*lock = nullptr;
+				
+				int fd = ::open(fname.c_str(),O_RDWR | O_CREAT | kOpenBaseFlags , 0644);
+				
+				if(fd < 0){
+					return LinuxError(fname, errno);
+				}
+
+				if(!locks_.insert(fname)){
+					::close(fd);
+					return Status::IOError("lock" + fname ,"already held by process");
+				}
+				
+				if(lockOrUnLock(fd,true) == -1){
+					int lockerrNo = errno;
+					::close(fd);
+					locks_.remove(fname);
+					return LinuxError("lock " + fname, lockerrNo);
+				}
+				*lock = new LinuxFileLock(fd, filename);
+				return Status::OK();
+			}
+
+			Status unlockFile(FileLock* lock)override{
+				LinuxFileLock* fileLock = static_cast<LinuxFileLock*> (lock);
+				if(lockOrUnLock(fileLock->fd(),false) == -1){
+					return LinuxError("unlock " + fileLock->filename(),errno);
+				}
+				locks_.remove(fileLock->filename());
+				::close(fileLock->fd());
+				delete fileLock;
+				return Status::OK();
+			}
+
+			void schedule(ArrageFunc func, void* arg) override;
+
+
+			void startThread(ArrageFunc func,void *arg) override{
+			
+				std::thread newThread(func,arg);
+				newThread.detach();
+			}
+
+			Status getTestDirectory(std::string* result) override {
+				const char* env = std::getenv("TEST_TMPDIR");
+				if (env && env[0] != '\0') {
+					*result = env;
+				}
+				else {
+					char buf[100];
+					std::snprintf(buf, sizeof(buf), "/tmp/CDB-%d",
+						static_cast<int>(::geteuid()));
+					*result = buf;
+				}
+
+				// The CreateDir status is ignored because the directory may already exist.
+				createDir(*result);
+				return Status::OK();
+			}
+
+			Status newLogger(const std::string& fname, Logger** result) override{
+				int fd = ::open(filename.c_str(),
+					O_APPEND | O_WRONLY | O_CREAT | kOpenBaseFlags, 0644);
+				if (fd < 0) {
+					*result = nullptr;
+					return LinuxError(filename, errno);
+				}
+
+				std::FILE* fp = ::fdopen(fd, "w");
+				if (fp == nullptr) {
+					::close(fd);
+					*result = nullptr;
+					return LinuxError(filename, errno);
+				}
+				else {
+					*result = new PosixLogger(fp);
+					return Status::OK();
+				}
+				
+			}
+
+
+			uint64_t nowMicros() override{
+				static constexpr uint64_t kUsecondsPerSecond = 1000000;
+				struct ::timeval tv;
+				::gettimeofday(&tv, nullptr);
+				return static_cast<uint64_t>(tv.tv_sec) * kUsecondsPerSecond + tv.tv_usec;
+			}
+
+			void sleepForMicroseconds(int micros) override {
+				std::this_thread::sleep_for(std::chrono::microseconds(micros));
+			}
 
 		private:
 
@@ -555,8 +733,40 @@ namespace CDB{
 			Limiter mmapLimiter_;
 			Limiter fdLimiter_;
 		};
+		// Return the maximum number of concurrent mmaps.
+		int maxMmaps() { return gMapLimit; }
 
+		int MaxMmaps() { return g_mmap_limit; }
 
-
+		// Return the maximum number of read-only files to keep open.
+		int maxOpenFiles() {
+			//we can use 1/5 file descriptor
+			if (gOpenReadOnlyFileLimit >= 0) {
+				return gOpenReadOnlyFileLimit;
+			}
+#ifdef __Fuchsia__
+			// Fuchsia doesn't implement getrlimit.
+			gOpenReadOnlyFileLimit = 50;
+#else
+			struct ::rlimit rlim;
+			if (::getrlimit(RLIMIT_NOFILE, &rlim)) {
+				// getrlimit failed, fallback to hard-coded default.
+				gOpenReadOnlyFileLimit = 50;
+			}
+			else if (rlim.rlim_cur == RLIM_INFINITY) {
+				gOpenReadOnlyFileLimit = std::numeric_limits<int>::max();
+			}
+			else {
+				// Allow use of 20% of available file descriptors for read-only files.
+				gOpenReadOnlyFileLimit = rlim.rlim_cur / 5;
+			}
+#endif
+			return gOpenReadOnlyFileLimit;
+		}
 	}
+
+
+
+
+
 }
