@@ -23,30 +23,30 @@ public:
 
 	// An iterator is either positioned at a key/value pair, or
 	// not valid.  This method returns true iff the iterator is valid.
-	virtual bool Valid() const = 0;
+	virtual bool valid() const = 0;
 
 	// Position at the first key in the source.  The iterator is Valid()
 	// after this call iff the source is not empty.
-	virtual void SeekToFirst() = 0;
+	virtual void seekToFirst() = 0;
 
 	// Position at the last key in the source.  The iterator is
 	// Valid() after this call iff the source is not empty.
-	virtual void SeekToLast() = 0;
+	virtual void seekToLast() = 0;
 
 	// Position at the first key in the source that is at or past target.
 	// The iterator is Valid() after this call iff the source contains
 	// an entry that comes at or past target.
-	virtual void Seek(const Slice& target) = 0;
+	virtual void seek(const Slice& target) = 0;
 
 	// Moves to the next entry in the source.  After this call, Valid() is
 	// true iff the iterator was not positioned at the last entry in the source.
 	// REQUIRES: Valid()
-	virtual void Next() = 0;
+	virtual void next() = 0;
 
 	// Moves to the previous entry in the source.  After this call, Valid() is
 	// true iff the iterator was not positioned at the first entry in source.
 	// REQUIRES: Valid()
-	virtual void Prev() = 0;
+	virtual void prev() = 0;
 
 	// Return the key for the current entry.  The underlying storage for
 	// the returned slice is valid only until the next modification of
@@ -69,16 +69,16 @@ public:
 	// Note that unlike all of the preceding methods, this method is
 	// not abstract and therefore clients should not override it.
 	using CleanupFunction = void (*)(void* arg1, void* arg2);
-	void RegisterCleanup(CleanupFunction function, void* arg1, void* arg2);
+	void registerCleanup(CleanupFunction function, void* arg1, void* arg2);
 
 private:
 	// Cleanup functions are stored in a single-linked list.
 	// The list's head node is inlined in the iterator.
 	struct CleanupNode {
 		// True if the node is not used. Only head nodes might be unused.
-		bool IsEmpty() const { return function == nullptr; }
+		bool isEmpty() const { return function == nullptr; }
 		// Invokes the cleanup function.
-		void Run() {
+		void run() {
 			assert(function != nullptr);
 			(*function)(arg1, arg2);
 		}
@@ -94,9 +94,9 @@ private:
 
 };
 // Return an empty iterator (yields nothing).
-Iterator* NewEmptyIterator();
+Iterator* newEmptyIterator();
 
-Iterator* NewErrorIterator(const Status& status);
+Iterator* newErrorIterator(const Status& status);
 }
 
 

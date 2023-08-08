@@ -8,6 +8,7 @@
 #include <cassert>
 #include <cstdlib>
 #include "Util/Random.h"
+#include "Util/Allocator.h"
 namespace CDB {
 	template<typename Key, class Cmp>
 	class SkipList {
@@ -16,7 +17,7 @@ namespace CDB {
 		struct Node;
 
 	public:
-		explicit SkipList(Cmp cmp);
+		explicit SkipList(Cmp cmp,Allocator *alloc);
 
 		SkipList(const SkipList&) = delete;
 
@@ -79,6 +80,7 @@ namespace CDB {
 		Cmp const cmper_;
 		Node* const head_;
 		Random rand_;
+		Allocator* const alloc_;
 	};
 
 	template <typename Key, class Cmp>
@@ -109,7 +111,7 @@ namespace CDB {
 		}
 
 	private:
-		std::atomic<Node*> next_[KMaxHeight];
+		std::atomic<Node*> next_[1];
 	};
 
 
@@ -216,9 +218,9 @@ namespace CDB {
 	}
 
 	template<typename Key, class Cmp>
-	CDB::SkipList<Key, Cmp>::SkipList(Cmp cmp)
+	CDB::SkipList<Key, Cmp>::SkipList(Cmp cmp,Allocator *alloc)
 		:cmper_(cmp),head_(newNode(0,KMaxHeight)),
-		maxHeight_(1),rand_(0xdeadbeef)
+		maxHeight_(1),rand_(0xdeadbeef),alloc_(alloc)
 	{
 		for (int i = 0; i < KMaxHeight;++i)	 {
 			head_->setNext(i,nullptr);
@@ -271,7 +273,8 @@ namespace CDB {
 template<typename Key, class Cmp>
 inline typename CDB::SkipList<Key, Cmp>::Node* SkipList<Key, Cmp>::newNode(const Key& key, int height)
 {
-	return new Node(key);
+	char* const nodeMem = alloc_->allocateAligned(sizeof(Node) + sizeof(std::atomic<Node*>) * (height - 1));
+	return new (nodeMem) Node(key);
 }
 
 template<typename Key, class Cmp>

@@ -73,6 +73,13 @@ namespace CDB{
 		dst->append(value.data(), value.size());
 	}
 
+	/*!
+	 *  @brief get byte of V in the encoded  Str 
+	 *  @param
+	 *  @return 
+	 *
+	 */
+
 	int VarintLength(uint64_t v) {
 		int len = 1;
 		while (v >= 128) {
