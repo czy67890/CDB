@@ -6,7 +6,6 @@
  *
  * 
  */
-#pragma once
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -38,6 +37,7 @@
 #include "CDataBase/Status.h"
 #include "Util/ThreadAnnotations.h"
 #include "Util/PosixLogger.h"
+#include "Util/MutexLock.h"
 namespace CDB {
 	namespace {
 		//can be set by setReadOnlyMapLimit() and maxOpenFileLimit
@@ -50,9 +50,9 @@ namespace CDB {
 		int gMapLimit = KDefaultMmapLimit;
 
 #if defined(HAVE_O_CLOEXEC)
-		constexpr const int kOpenBaseFlags = O_CLOEXEC;
+		
 #endif
-
+		constexpr const int kOpenBaseFlags = O_CLOEXEC;
 		constexpr size_t KWriteableFileBufferSize = 65536;
 
 		Status LinuxError(const std::string& context, int errorNum) {
@@ -113,7 +113,7 @@ namespace CDB {
 
 			}
 
-			~LinuxSequentialFile() override { close(fd_); }
+			~LinuxSequentialFile()  { close(fd_); }
 
 			Status read(size_t n, Slice* result, char* scratch) override {
 				Status status;
@@ -168,7 +168,7 @@ namespace CDB {
 				}
 			}
 
-			~LinuxRandomAccessFile() override {
+			~LinuxRandomAccessFile()  {
 				if (hasPermanentFd_) {
 					assert(fd_ != -1);
 					::close(fd_);
@@ -190,7 +190,7 @@ namespace CDB {
 				/// read every time will start from file's currnt offset ,then add the offset
 				/// pread enable us to indicate offset(always from zero)
 				ssize_t readSize = ::pread(fd, scratch, n, static_cast<off_t>(offset));
-				*result = Slice((scratch, readSize < 0) ? 0 : readSize);
+				*result = Slice(scratch, readSize < 0 ? 0 : readSize);
 				if (readSize < 0) {
 					status = LinuxError(fileName_, errno);
 				}
@@ -215,14 +215,14 @@ namespace CDB {
 
 			{}
 
-			~LinuxMmapReadableFile() override {
-				::munmap(static_cast<void*>(mmapBase_, len_));
+			~LinuxMmapReadableFile()  {
+				::munmap(static_cast<void*>(mmapBase_),len_);
 				mmapLimiter_->release();
 			}
 
 			Status read(uint64_t offset, size_t n, Slice* result, char* scratch) const override {
 				if (offset + n > len_) {
-					*result = Status();
+					*result = Slice();
 					///EINVAL 无效的参数
 					return LinuxError(fileName_, EINVAL);
 				}
@@ -248,7 +248,7 @@ namespace CDB {
 
 			}
 
-			~LinuxWritableFile() override {
+			~LinuxWritableFile()  {
 				if (fd_ >= 0) {
 					close();
 				}
@@ -482,9 +482,9 @@ namespace CDB {
 		using BackWorkGroundFunc = std::function<void(void*)>;
 		class LinuxEnv :public Env {
 		public:
-			LinuxEnv();
+			LinuxEnv() ;
 
-			~LinuxEnv() override {
+			~LinuxEnv()  {
 				static const char msg[] = "LinuxEnv singleton destroyed. Unsupported behavior!\n";
 				std::fwrite(msg, 1, sizeof(msg), stderr);
 				std::abort();
@@ -551,12 +551,12 @@ namespace CDB {
 			}
 
 			Status newAppendableFile(const std::string& fname, WritableFile** result) override {
-				int fd = ::open(filename.c_str(), O_APPEND | O_WRONLY | O_CREAT | kOpenBaseFlags, 0644);
+				int fd = ::open(fname.c_str(), O_APPEND | O_WRONLY | O_CREAT | kOpenBaseFlags, 0644);
 				if (fd < 0) {
 					*result = nullptr;
 					return LinuxError(fname, errno);
 				}
-				*result = new LinuxWritableFile(filename, fd);
+				*result = new LinuxWritableFile(fname, fd);
 				return Status::OK();
 			}
 
@@ -604,10 +604,10 @@ namespace CDB {
 			Status getFileSize(const std::string& fname, uint64_t* fileSize) override {
 				struct ::stat fileStat;
 				if (::stat(fname.c_str(), &fileStat) != 0) {
-					*size = 0;
+					*fileSize = 0;
 					return LinuxError(fname, errno);
 				}
-				*size = fileStat.st_size;
+				*fileSize = fileStat.st_size;
 				return Status::OK();
 			}
 
@@ -638,7 +638,7 @@ namespace CDB {
 					locks_.remove(fname);
 					return LinuxError("lock " + fname, lockerrNo);
 				}
-				*lock = new LinuxFileLock(fd, filename);
+				*lock = new LinuxFileLock(fd, fname);
 				return Status::OK();
 			}
 
@@ -662,7 +662,7 @@ namespace CDB {
 				newThread.detach();
 			}
 
-			Status getTestDirectory(std::string* result) override {
+			Status getTestDir(std::string* result) override {
 				const char* env = std::getenv("TEST_TMPDIR");
 				if (env && env[0] != '\0') {
 					*result = env;
@@ -680,18 +680,18 @@ namespace CDB {
 			}
 
 			Status newLogger(const std::string& fname, Logger** result) override {
-				int fd = ::open(filename.c_str(),
+				int fd = ::open(fname.c_str(),
 					O_APPEND | O_WRONLY | O_CREAT | kOpenBaseFlags, 0644);
 				if (fd < 0) {
 					*result = nullptr;
-					return LinuxError(filename, errno);
+					return LinuxError(fname, errno);
 				}
 
 				std::FILE* fp = ::fdopen(fd, "w");
 				if (fp == nullptr) {
 					::close(fd);
 					*result = nullptr;
-					return LinuxError(filename, errno);
+					return LinuxError(fname, errno);
 				}
 				else {
 					*result = new PosixLogger(fp);
@@ -708,10 +708,10 @@ namespace CDB {
 				return static_cast<uint64_t>(tv.tv_sec) * kUsecondsPerSecond + tv.tv_usec;
 			}
 
-			void sleepForMicroseconds(int micros) override {
+			void sleepMicroSeconds(int micros) override {
 				std::this_thread::sleep_for(std::chrono::microseconds(micros));
 			}
-
+			
 		private:
 			void backgroundThreadMain();
 
@@ -721,7 +721,7 @@ namespace CDB {
 			}
 			struct BackGroundWorkItem {
 				explicit BackGroundWorkItem(BackWorkGroundFunc func, void* arg)
-					:this->func(std::move(func)), this->arg(arg)
+					:func(std::move(func)), arg(arg)
 				{
 				}
 				const BackWorkGroundFunc func;
@@ -820,7 +820,7 @@ namespace CDB {
 
 			SingletonEnv& operator=(const SingletonEnv&) = delete;
 
-			Env* env() { return static_cast<EnvType*>(&envStorage_); }
+			Env* env() { return reinterpret_cast<Env*>(&envStorage_); }
 
 			static void assertEnvNotInited() {
 
@@ -833,11 +833,12 @@ namespace CDB {
 		private:
 			typename std::aligned_storage<sizeof(EnvType), alignof(EnvType)>::type envStorage_;
 #if !defined(NDEBUG)
-			static atomic<bool> envInited_;
+			static std::atomic<bool> envInited_;
 #endif
 		};
 #if !defined(NDEBUG)
-		static atomic<bool> SingletonEnv<EnvType>::envInited_;
+		template<typename EnvType>
+		std::atomic<bool> SingletonEnv<EnvType>::envInited_;
 #endif
 		using LinuxDefaultEnv = SingletonEnv<LinuxEnv>;
 

@@ -113,7 +113,7 @@ void CDB::InternalFilterPolicy::createFilter(const Slice* keys, int n, std::stri
 
 bool CDB::InternalFilterPolicy::keyMayMatch(const Slice& key, const Slice& filter) const
 {
-	return user_policy_->keyMayMatch(ExtractUserKey(key),f);
+	return user_policy_->keyMayMatch(ExtractUserKey(key),filter);
 }
 
 LookupKey::LookupKey(const Slice& user_key, SequenceNumber sequence)
@@ -128,11 +128,11 @@ LookupKey::LookupKey(const Slice& user_key, SequenceNumber sequence)
 		dst = new char[needed];
 	}
 	start_ = dst;
-	dst = EncodeFixed32(dst, usize + 8);
+	dst = EncodeVarint32(dst, usize + 8);
 	kstart_ = dst;
 	memcpy(dst,user_key.data(),usize);
 	dst += usize;
-	EncodeFixed64(dst, packSequenceAndType(s, kValueTypeForSeek));
+	EncodeFixed64(dst, packSequenceAndType(sequence, kValueTypeForSeek));
 	dst += 8;
 	end_ = start_;
 }

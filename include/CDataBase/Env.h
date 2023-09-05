@@ -21,15 +21,15 @@ namespace CDB {
 	class RandomAccessFile;
 	class SequentialFile;
 	class WritableFile;
-
+	using ArrageFunc = std::function<void(void* arg)>;
 	class Env {
-		using ArrageFunc = std::function<void(void* arg)>;
+		
 	public:
 		Env();
 
 		Env(const Env&) = delete;
 
-		virtual ~Env();
+		virtual ~Env() = default;
 
 		static Env* Default();
 
@@ -38,7 +38,7 @@ namespace CDB {
 		virtual Status newRandomAccessFile(const std::string& fname,
 			RandomAccessFile** result) = 0;
 
-		virtual Status newWriteableFile(const std::string& name, WritableFile** result) = 0;
+		virtual Status newWritableFile(const std::string& name, WritableFile** result) = 0;
 
 		virtual Status newAppendableFile(const std::string& name, WritableFile** result) = 0;
 
@@ -155,7 +155,11 @@ namespace CDB {
 		virtual ~FileLock();
 	};
 
-	void Log(Logger* infoLog, const char* format, ...);
+	void Log(Logger * infoLog, const char* format, ...)
+#if defined(__GNUC__) || defined(__clang__)
+		__attribute__((__format__(__printf__, 2, 3)))
+#endif
+		;
 
 	Status WriteStringToFile(Env* env, const Slice& data, const std::string& fname);
 
@@ -180,8 +184,8 @@ namespace CDB {
 			return target_->newRandomAccessFile(f, r);
 		}
 
-		Status newWriteableFile(const std::string& name, WritableFile** result) override{
-			return target_->newWriteableFile(name,result);
+		Status newWritableFile(const std::string& name, WritableFile** result) override{
+			return target_->newWritableFile(name,result);
 		}
 
 		Status newAppendableFile(const std::string& f, WritableFile** r) override {
@@ -226,6 +230,8 @@ namespace CDB {
 			return target_->newLogger(fname, result);
 		}
 		uint64_t nowMicros() override { return target_->nowMicros(); }
+		
+		
 		void sleepMicroSeconds(int micros) override {
 			target_->sleepMicroSeconds(micros);
 		}

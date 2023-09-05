@@ -11,7 +11,7 @@
 #include "DataBase/DBFormat.h"
 #include "CDataBase/Slice.h"
 #include "CDataBase/Status.h"
-
+#include "DataBase/LogFormat.h"
 
 namespace CDB{
 	class SequentialFile;

@@ -29,6 +29,8 @@ char* CDB::Allocator::allocateAligned(size_t bytes)
 	///use & to accecelerate calculate
 	size_t currentMod = reinterpret_cast<uintptr_t>(allocPtr_) & (align - 1);
 	///byte needed to fill 
+	char* result = nullptr;
+
 	size_t slop = align -  currentMod;
 	int needed = bytes + slop;
 	if(needed <= allocBytesRemain_){

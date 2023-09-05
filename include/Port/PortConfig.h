@@ -1,4 +1,7 @@
 #pragma once
+
+
+/*
 #if !defined(HAVE_FDATASYNC)
 #cmakedefine01 HAVE_FDATASYNC
 #endif  // !defined(HAVE_FDATASYNC)
@@ -27,3 +30,5 @@
 #if !defined(HAVE_Zstd)
 #cmakedefine01 HAVE_ZSTD
 #endif  // !defined(HAVE_ZSTD)
+
+*/

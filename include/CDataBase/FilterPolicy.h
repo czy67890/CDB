@@ -1,5 +1,5 @@
 #pragma once
-#include <string_view>
+#include "CDataBase/Slice.h"
 /*!
  * \file FilterPolicy.h
  *
@@ -8,9 +8,9 @@
  *
  * 
  */
-namespace CDB{
-class Slice;
 
+
+namespace CDB{
 
 class FilterPolicy{
 public:

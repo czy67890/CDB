@@ -17,7 +17,7 @@
 #include <thread>
 #include "CDataBase/Env.h"
 namespace CDB{
-	class PosixLogger final : public :Logger{
+	class PosixLogger final : public Logger{
 	public:
 		explicit PosixLogger(std::FILE *fp)
 			:fp_(fp)

@@ -1,0 +1,11 @@
+/mnt/c/code/CDB/build/CMakeFiles/edit_cache.dir
+/mnt/c/code/CDB/build/CMakeFiles/rebuild_cache.dir
+/mnt/c/code/CDB/build/src/CMakeFiles/db_test_main.dir
+/mnt/c/code/CDB/build/src/CMakeFiles/edit_cache.dir
+/mnt/c/code/CDB/build/src/CMakeFiles/rebuild_cache.dir
+/mnt/c/code/CDB/build/src/Util/CMakeFiles/Util.dir
+/mnt/c/code/CDB/build/src/Util/CMakeFiles/edit_cache.dir
+/mnt/c/code/CDB/build/src/Util/CMakeFiles/rebuild_cache.dir
+/mnt/c/code/CDB/build/src/DataBase/CMakeFiles/DataBase.dir
+/mnt/c/code/CDB/build/src/DataBase/CMakeFiles/edit_cache.dir
+/mnt/c/code/CDB/build/src/DataBase/CMakeFiles/rebuild_cache.dir

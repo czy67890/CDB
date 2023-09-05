@@ -1,0 +1,2 @@
+/usr/bin/ar qc libDataBase.a CMakeFiles/DataBase.dir/DBFormat.cc.o CMakeFiles/DataBase.dir/LogReader.cc.o CMakeFiles/DataBase.dir/LogWriter.cc.o CMakeFiles/DataBase.dir/MemTable.cc.o CMakeFiles/DataBase.dir/SKipList.cc.o CMakeFiles/DataBase.dir/SkipListTest.cc.o
+/usr/bin/ranlib libDataBase.a

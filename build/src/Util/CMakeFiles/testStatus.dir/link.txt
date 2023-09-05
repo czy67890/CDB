@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/testStatus.dir/StatusTest.cc.o -o testStatus  -lgtest -lgtest_main libUtil.a 

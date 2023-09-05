@@ -4,4 +4,6 @@ project(MyDataBase VERSION 1.23.0 LANGUAGES C CXX)
 include_directories(include)
 include_directories(src)
 set(CMAKE_C_STANDARD 20)
+
+set(CMAKE_CXX_STANDARD 20)
 add_subdirectory(src)

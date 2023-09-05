@@ -1,5 +1,5 @@
 #include "DataBase/LogReader.h"
-#include <cstdio.h>
+#include <cstdio>
 #include "CDataBase/Env.h"
 #include "Util/Coding.h"
 #include "Util/Crc32.h"
